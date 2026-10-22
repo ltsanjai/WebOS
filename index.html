@@ -1,0 +1,1502 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full select-none">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebOS — Desktop Environment</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            500: '#06b6d4',
+                            600: '#0891b2',
+                            700: '#0e7490',
+                        },
+                        os: {
+                            bg: '#0f172a',
+                            surface: '#1e293b',
+                            border: '#334155',
+                            text: '#f8fafc',
+                            muted: '#94a3b8'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['Fira Code', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        /* Glassmorphism utility */
+        .glass {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .glass-light {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        /* Window drag/resize handle overlays */
+        .resize-handle {
+            position: absolute;
+            z-index: 10;
+        }
+        .resize-n  { top: -4px; left: 8px; right: 8px; height: 8px; cursor: ns-resize; }
+        .resize-s  { bottom: -4px; left: 8px; right: 8px; height: 8px; cursor: ns-resize; }
+        .resize-e  { top: 8px; bottom: 8px; right: -4px; width: 8px; cursor: ew-resize; }
+        .resize-w  { top: 8px; bottom: 8px; left: -4px; width: 8px; cursor: ew-resize; }
+        .resize-ne { top: -4px; right: -4px; width: 12px; height: 12px; cursor: nesw-resize; }
+        .resize-nw { top: -4px; left: -4px; width: 12px; height: 12px; cursor: nwse-resize; }
+        .resize-se { bottom: -4px; right: -4px; width: 12px; height: 12px; cursor: nwse-resize; }
+        .resize-sw { bottom: -4px; left: -4px; width: 12px; height: 12px; cursor: nesw-resize; }
+
+        /* Window animations */
+        .window-transition {
+            transition: transform 0.15s ease-out, opacity 0.15s ease-out, width 0.15s ease-out, height 0.15s ease-out, top 0.15s ease-out, left 0.15s ease-out;
+        }
+        
+        /* Wallpaper backgrounds */
+        .wp-1 { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #311042 100%); }
+        .wp-2 { background: linear-gradient(135deg, #0284c7 0%, #0d9488 50%, #15803d 100%); }
+        .wp-3 { background: linear-gradient(135deg, #4c1d95 0%, #831843 50%, #881337 100%); }
+        .wp-4 { background: linear-gradient(135deg, #111827 0%, #1f2937 100%); }
+
+        /* Selection outline */
+        .desktop-shortcut.selected {
+            background-color: rgba(59, 130, 246, 0.3);
+            border: 1px solid rgba(96, 165, 250, 0.5);
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body class="h-full overflow-hidden text-slate-100 font-sans antialiased bg-slate-900 select-none">
+
+    <!-- DESKTOP CONTAINER -->
+    <div id="desktop" class="relative w-full h-full flex flex-col overflow-hidden wp-1 transition-all duration-500">
+        
+        <!-- WORKSPACE / WINDOW AREA -->
+        <div id="workspace" class="relative flex-1 w-full h-full overflow-hidden">
+            
+            <!-- DESKTOP ICONS GRID -->
+            <div id="desktop-icons" class="absolute inset-0 p-4 grid grid-flow-col auto-cols-max grid-rows-6 gap-4 z-0 pointer-events-auto">
+                <!-- Dynamic Icons loaded here -->
+            </div>
+
+            <!-- WINDOWS LAYER -->
+            <div id="windows-container" class="absolute inset-0 pointer-events-none z-10">
+                <!-- Application Windows dynamically rendered here -->
+            </div>
+
+            <!-- SNAP PREVIEW OVERLAY -->
+            <div id="snap-preview" class="absolute hidden bg-cyan-500/20 border-2 border-cyan-400 rounded-lg backdrop-blur-sm transition-all duration-150 z-20 pointer-events-none"></div>
+
+            <!-- CONTEXT MENU -->
+            <div id="context-menu" class="fixed hidden glass rounded-xl shadow-2xl py-2 w-52 z-50 text-sm border border-slate-700/50">
+                <button onclick="WebOS.openApp('file-manager')" class="w-full text-left px-4 py-2 hover:bg-cyan-500/20 flex items-center gap-2"><i class="fa-regular fa-folder text-cyan-400"></i> Open File Manager</button>
+                <button onclick="WebOS.openApp('terminal')" class="w-full text-left px-4 py-2 hover:bg-cyan-500/20 flex items-center gap-2"><i class="fa-solid fa-terminal text-emerald-400"></i> Open Terminal</button>
+                <div class="my-1 border-t border-slate-700/50"></div>
+                <button onclick="WebOS.openApp('settings')" class="w-full text-left px-4 py-2 hover:bg-cyan-500/20 flex items-center gap-2"><i class="fa-solid fa-gear text-slate-400"></i> Desktop Settings</button>
+                <button onclick="WebOS.toggleFullScreen()" class="w-full text-left px-4 py-2 hover:bg-cyan-500/20 flex items-center gap-2"><i class="fa-solid fa-expand text-indigo-400"></i> Toggle Fullscreen</button>
+                <div class="my-1 border-t border-slate-700/50"></div>
+                <button onclick="WebOS.restartUI()" class="w-full text-left px-4 py-2 hover:bg-cyan-500/20 flex items-center gap-2 text-rose-400"><i class="fa-solid fa-rotate text-rose-400"></i> Refresh WebOS</button>
+            </div>
+
+            <!-- START MENU MODAL -->
+            <div id="start-menu" class="fixed hidden left-3 bottom-14 w-96 max-w-[calc(100vw-1.5rem)] glass rounded-2xl shadow-2xl z-40 border border-slate-700/60 overflow-hidden flex flex-col transition-all duration-200">
+                <!-- Search header -->
+                <div class="p-4 border-b border-slate-700/50">
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400"></i>
+                        <input type="text" id="start-search" placeholder="Search applications, files, settings..." class="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-500">
+                    </div>
+                </div>
+
+                <!-- Apps Section -->
+                <div class="p-4 max-h-96 overflow-y-auto space-y-4">
+                    <div>
+                        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Pinned Apps</div>
+                        <div id="start-pinned-grid" class="grid grid-cols-4 gap-2">
+                            <!-- Dynamic Pinned Apps -->
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">All Applications</div>
+                        <div id="start-all-list" class="space-y-1">
+                            <!-- Dynamic All Apps -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer / Power -->
+                <div class="p-3 bg-slate-950/40 border-t border-slate-700/50 flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center font-bold text-white text-sm">
+                            U
+                        </div>
+                        <div>
+                            <div class="text-sm font-medium leading-none">User Profile</div>
+                            <div class="text-[10px] text-emerald-400 font-mono mt-0.5">webos@localhost</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <button onclick="WebOS.openApp('settings')" title="Settings" class="p-2 hover:bg-slate-700/50 rounded-lg text-slate-300"><i class="fa-solid fa-gear"></i></button>
+                        <button onclick="WebOS.lockScreen()" title="Lock Screen" class="p-2 hover:bg-slate-700/50 rounded-lg text-slate-300"><i class="fa-solid fa-lock"></i></button>
+                        <button onclick="WebOS.powerMenu()" title="Power Menu" class="p-2 hover:bg-rose-500/20 text-rose-400 rounded-lg"><i class="fa-solid fa-power-off"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- QUICK SETTINGS PANEL -->
+            <div id="quick-settings" class="fixed hidden right-3 bottom-14 w-80 glass rounded-2xl shadow-2xl z-40 border border-slate-700/60 p-4 space-y-4">
+                <div class="flex justify-between items-center">
+                    <span class="font-semibold text-sm">Quick Settings</span>
+                    <span class="text-xs font-mono text-cyan-400">WebOS v1.0</span>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="WebOS.toggleTheme()" id="qs-theme-btn" class="p-3 bg-slate-800/60 border border-slate-700/50 rounded-xl flex items-center gap-3 text-left hover:bg-slate-700/50">
+                        <i class="fa-solid fa-moon text-indigo-400 text-lg"></i>
+                        <div>
+                            <div class="text-xs font-medium">Dark Mode</div>
+                            <div class="text-[10px] text-slate-400" id="qs-theme-status">Enabled</div>
+                        </div>
+                    </button>
+                    <button onclick="WebOS.toggleSound()" id="qs-sound-btn" class="p-3 bg-slate-800/60 border border-slate-700/50 rounded-xl flex items-center gap-3 text-left hover:bg-slate-700/50">
+                        <i class="fa-solid fa-volume-high text-cyan-400 text-lg" id="qs-sound-icon"></i>
+                        <div>
+                            <div class="text-xs font-medium">Sound</div>
+                            <div class="text-[10px] text-slate-400" id="qs-sound-status">On</div>
+                        </div>
+                    </button>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="flex justify-between text-xs text-slate-400">
+                        <span>Volume</span>
+                        <span id="volume-val">80%</span>
+                    </div>
+                    <input type="range" min="0" max="100" value="80" class="w-full accent-cyan-500 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer" oninput="document.getElementById('volume-val').innerText = this.value + '%'">
+                </div>
+
+                <div class="pt-2 border-t border-slate-700/50 flex justify-between items-center text-xs">
+                    <button onclick="WebOS.openApp('settings')" class="text-cyan-400 hover:underline">All Settings</button>
+                    <button onclick="WebOS.openApp('system-monitor')" class="text-slate-400 hover:text-slate-200">Sys Monitor</button>
+                </div>
+            </div>
+
+            <!-- NOTIFICATION CENTER PANEL -->
+            <div id="notification-center" class="fixed hidden right-3 bottom-14 w-80 glass rounded-2xl shadow-2xl z-40 border border-slate-700/60 p-4 flex flex-col max-h-[28rem]">
+                <div class="flex justify-between items-center mb-3">
+                    <span class="font-semibold text-sm">Notifications</span>
+                    <button onclick="WebOS.clearNotifications()" class="text-xs text-slate-400 hover:text-cyan-400">Clear All</button>
+                </div>
+                <div id="notifications-list" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                    <div class="text-xs text-slate-500 text-center py-8">No new notifications</div>
+                </div>
+            </div>
+
+            <!-- ALT+TAB SWITCHER OVERLAY -->
+            <div id="alttab-overlay" class="fixed inset-0 hidden bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-8">
+                <div class="glass p-6 rounded-3xl border border-slate-700/60 max-w-2xl w-full">
+                    <div class="text-xs font-mono text-cyan-400 mb-4 uppercase tracking-widest text-center">Open Applications (Alt + Tab)</div>
+                    <div id="alttab-list" class="grid grid-cols-3 gap-4">
+                        <!-- Dynamic Windows Cards -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- LOCK SCREEN OVERLAY -->
+            <div id="lock-screen" class="fixed inset-0 hidden glass z-50 flex flex-col items-center justify-center space-y-6">
+                <div class="w-24 h-24 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-4xl text-white font-bold shadow-2xl">
+                    U
+                </div>
+                <div class="text-center">
+                    <h2 class="text-2xl font-bold">User Profile</h2>
+                    <p class="text-sm text-slate-400 font-mono">Session Locked</p>
+                </div>
+                <button onclick="WebOS.unlockScreen()" class="px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-medium rounded-xl shadow-lg transition">Unlock Session</button>
+            </div>
+
+        </div>
+
+        <!-- TASKBAR -->
+        <div id="taskbar" class="relative w-full h-12 glass border-t border-slate-700/50 z-30 flex items-center justify-between px-3 select-none">
+            
+            <!-- LEFT: Start + Search + Quick Launch -->
+            <div class="flex items-center gap-2">
+                <!-- Start Button -->
+                <button id="start-btn" onclick="WebOS.toggleStartMenu()" class="p-2 px-3 rounded-xl hover:bg-cyan-500/20 active:bg-cyan-500/30 text-cyan-400 transition flex items-center gap-2 font-bold text-sm">
+                    <i class="fa-solid fa-cube text-lg"></i>
+                    <span class="hidden sm:inline">Start</span>
+                </button>
+
+                <!-- Search Shortcut -->
+                <button onclick="WebOS.toggleStartMenu(true)" class="p-2 rounded-xl hover:bg-slate-700/50 text-slate-400 hover:text-slate-200 transition">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </button>
+
+                <div class="h-5 w-px bg-slate-700/60 mx-1"></div>
+
+                <!-- Running / Pinned Apps List -->
+                <div id="taskbar-apps" class="flex items-center gap-1.5 overflow-x-auto">
+                    <!-- Dynamic taskbar items -->
+                </div>
+            </div>
+
+            <!-- RIGHT: System Tray -->
+            <div class="flex items-center gap-2 text-slate-300 text-sm">
+                <button onclick="WebOS.toggleQuickSettings()" class="p-2 hover:bg-slate-700/50 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-wifi text-xs"></i>
+                    <i class="fa-solid fa-volume-high text-xs"></i>
+                    <i class="fa-solid fa-battery-three-quarters text-xs text-emerald-400"></i>
+                </button>
+
+                <div class="h-5 w-px bg-slate-700/60 mx-1"></div>
+
+                <!-- Notification Center Button -->
+                <button onclick="WebOS.toggleNotifications()" class="p-2 hover:bg-slate-700/50 rounded-xl transition relative">
+                    <i class="fa-regular fa-bell"></i>
+                    <span id="notif-badge" class="absolute top-1 right-1 w-2 h-2 bg-cyan-400 rounded-full hidden"></span>
+                </button>
+
+                <!-- Clock & Date -->
+                <button onclick="WebOS.openApp('calendar')" id="taskbar-clock" class="hover:bg-slate-700/50 px-2.5 py-1 rounded-xl text-right transition flex flex-col items-end leading-tight">
+                    <span id="clock-time" class="font-medium text-xs">12:00 PM</span>
+                    <span id="clock-date" class="text-[10px] text-slate-400">Oct 22, 2026</span>
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- MAIN OS APPLICATION LOGIC -->
+    <script>
+        /**
+         * WebOS Core Architecture & Single-File Runtime
+         */
+        
+        // --- VIRTUAL FILESYSTEM (IndexedDB Wrapper) ---
+        class VirtualFS {
+            constructor() {
+                this.dbName = 'WebOS_VFS';
+                this.dbVersion = 1;
+                this.db = null;
+            }
+
+            async init() {
+                return new Promise((resolve, reject) => {
+                    const request = indexedDB.open(this.dbName, this.dbVersion);
+                    request.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains('files')) {
+                            const store = db.createObjectStore('files', { keyPath: 'id' });
+                            store.createIndex('parentId', 'parentId', { unique: false });
+                            store.createIndex('path', 'path', { unique: true });
+                        }
+                    };
+                    request.onsuccess = (e) => {
+                        this.db = e.target.result;
+                        this.seedDefaults().then(resolve);
+                    };
+                    request.onerror = (e) => reject(e);
+                });
+            }
+
+            async seedDefaults() {
+                const rootDirs = [
+                    { id: 'root', name: '/', type: 'dir', parentId: null, path: '/' },
+                    { id: 'home', name: 'Home', type: 'dir', parentId: 'root', path: '/Home' },
+                    { id: 'desktop', name: 'Desktop', type: 'dir', parentId: 'home', path: '/Home/Desktop' },
+                    { id: 'documents', name: 'Documents', type: 'dir', parentId: 'home', path: '/Home/Documents' },
+                    { id: 'downloads', name: 'Downloads', type: 'dir', parentId: 'home', path: '/Home/Downloads' },
+                    { id: 'pictures', name: 'Pictures', type: 'dir', parentId: 'home', path: '/Home/Pictures' },
+                    { id: 'music', name: 'Music', type: 'dir', parentId: 'home', path: '/Home/Music' }
+                ];
+
+                for (const dir of rootDirs) {
+                    const existing = await this.getFileByPath(dir.path);
+                    if (!existing) {
+                        await this.saveFile(dir);
+                    }
+                }
+
+                // Sample Readme file
+                const samplePath = '/Home/Documents/Welcome.txt';
+                if (!await this.getFileByPath(samplePath)) {
+                    await this.saveFile({
+                        id: 'welcome-doc',
+                        name: 'Welcome.txt',
+                        type: 'file',
+                        parentId: 'documents',
+                        path: samplePath,
+                        content: 'Welcome to WebOS!\n\nThis is a fully simulated browser-based operating system.\n- Files created here persist in IndexedDB.\n- Open Terminal for CLI interaction.\n- Customise themes in Settings.',
+                        updatedAt: new Date().toISOString()
+                    });
+                }
+            }
+
+            async saveFile(fileObj) {
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction('files', 'readwrite');
+                    const store = tx.objectStore('files');
+                    if (!fileObj.id) fileObj.id = 'file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+                    if (!fileObj.updatedAt) fileObj.updatedAt = new Date().toISOString();
+                    const req = store.put(fileObj);
+                    req.onsuccess = () => resolve(fileObj);
+                    req.onerror = (e) => reject(e);
+                });
+            }
+
+            async getFileByPath(path) {
+                return new Promise((resolve) => {
+                    const tx = this.db.transaction('files', 'readonly');
+                    const store = tx.objectStore('files');
+                    const index = store.index('path');
+                    const req = index.get(path);
+                    req.onsuccess = () => resolve(req.result || null);
+                    req.onerror = () => resolve(null);
+                });
+            }
+
+            async getChildren(parentId) {
+                return new Promise((resolve) => {
+                    const tx = this.db.transaction('files', 'readonly');
+                    const store = tx.objectStore('files');
+                    const index = store.index('parentId');
+                    const req = index.getAll(parentId);
+                    req.onsuccess = () => resolve(req.result || []);
+                    req.onerror = () => resolve([]);
+                });
+            }
+
+            async deleteFile(id) {
+                return new Promise((resolve, reject) => {
+                    const tx = this.db.transaction('files', 'readwrite');
+                    const store = tx.objectStore('files');
+                    const req = store.delete(id);
+                    req.onsuccess = () => resolve(true);
+                    req.onerror = (e) => reject(e);
+                });
+            }
+        }
+
+        // --- CORE OPERATING SYSTEM MANAGER ---
+        class OSManager {
+            constructor() {
+                this.vfs = new VirtualFS();
+                this.apps = new Map();
+                this.windows = new Map();
+                this.activeWindowId = null;
+                this.zIndexCounter = 100;
+                this.notifications = [];
+                this.settings = {
+                    theme: 'dark',
+                    wallpaper: 'wp-1',
+                    sound: true,
+                    volume: 80,
+                    taskbarPos: 'bottom'
+                };
+            }
+
+            async init() {
+                await this.vfs.init();
+                this.loadSettings();
+                this.registerDefaultApps();
+                this.renderDesktopIcons();
+                this.setupEventListeners();
+                this.startClock();
+                this.notify('System Ready', 'WebOS loaded successfully.', 'info');
+            }
+
+            loadSettings() {
+                const saved = localStorage.getItem('webos_settings');
+                if (saved) {
+                    try { this.settings = { ...this.settings, ...JSON.parse(saved) }; } catch(e){}
+                }
+                this.applySettings();
+            }
+
+            saveSettings() {
+                localStorage.setItem('webos_settings', JSON.stringify(this.settings));
+                this.applySettings();
+            }
+
+            applySettings() {
+                const dt = document.getElementById('desktop');
+                dt.className = `relative w-full h-full flex flex-col overflow-hidden transition-all duration-500 ${this.settings.wallpaper}`;
+            }
+
+            registerApp(appConfig) {
+                this.apps.set(appConfig.id, appConfig);
+                this.renderStartMenu();
+            }
+
+            registerDefaultApps() {
+                // 1. File Manager
+                this.registerApp({
+                    id: 'file-manager',
+                    name: 'File Manager',
+                    icon: 'fa-folder',
+                    color: 'text-amber-400',
+                    pinned: true,
+                    width: 720,
+                    height: 480,
+                    render: (win, instance) => this.renderFileManager(win, instance)
+                });
+
+                // 2. Text Editor
+                this.registerApp({
+                    id: 'text-editor',
+                    name: 'Text Editor',
+                    icon: 'fa-file-lines',
+                    color: 'text-cyan-400',
+                    pinned: true,
+                    width: 640,
+                    height: 450,
+                    render: (win, instance) => this.renderTextEditor(win, instance)
+                });
+
+                // 3. Terminal Emulator
+                this.registerApp({
+                    id: 'terminal',
+                    name: 'Terminal',
+                    icon: 'fa-terminal',
+                    color: 'text-emerald-400',
+                    pinned: true,
+                    width: 680,
+                    height: 420,
+                    render: (win, instance) => this.renderTerminal(win, instance)
+                });
+
+                // 4. Settings
+                this.registerApp({
+                    id: 'settings',
+                    name: 'Settings',
+                    icon: 'fa-gear',
+                    color: 'text-slate-400',
+                    pinned: true,
+                    width: 580,
+                    height: 440,
+                    render: (win, instance) => this.renderSettings(win, instance)
+                });
+
+                // 5. Calculator
+                this.registerApp({
+                    id: 'calculator',
+                    name: 'Calculator',
+                    icon: 'fa-calculator',
+                    color: 'text-indigo-400',
+                    pinned: false,
+                    width: 320,
+                    height: 440,
+                    render: (win, instance) => this.renderCalculator(win, instance)
+                });
+
+                // 6. Browser
+                this.registerApp({
+                    id: 'browser',
+                    name: 'Web Browser',
+                    icon: 'fa-globe',
+                    color: 'text-blue-400',
+                    pinned: true,
+                    width: 800,
+                    height: 520,
+                    render: (win, instance) => this.renderBrowser(win, instance)
+                });
+
+                // 7. Paint / Canvas
+                this.registerApp({
+                    id: 'paint',
+                    name: 'Paint',
+                    icon: 'fa-palette',
+                    color: 'text-rose-400',
+                    pinned: false,
+                    width: 700,
+                    height: 500,
+                    render: (win, instance) => this.renderPaint(win, instance)
+                });
+
+                // 8. Games (Snake & Minesweeper)
+                this.registerApp({
+                    id: 'games',
+                    name: 'Games Center',
+                    icon: 'fa-gamepad',
+                    color: 'text-purple-400',
+                    pinned: false,
+                    width: 500,
+                    height: 480,
+                    render: (win, instance) => this.renderGames(win, instance)
+                });
+
+                // 9. System Monitor
+                this.registerApp({
+                    id: 'system-monitor',
+                    name: 'System Monitor',
+                    icon: 'fa-chart-line',
+                    color: 'text-teal-400',
+                    pinned: false,
+                    width: 600,
+                    height: 420,
+                    render: (win, instance) => this.renderSystemMonitor(win, instance)
+                });
+
+                // 10. Calendar
+                this.registerApp({
+                    id: 'calendar',
+                    name: 'Calendar',
+                    icon: 'fa-calendar-days',
+                    color: 'text-pink-400',
+                    pinned: false,
+                    width: 400,
+                    height: 440,
+                    render: (win, instance) => this.renderCalendar(win, instance)
+                });
+            }
+
+            // --- WINDOW MANAGEMENT SYSTEM ---
+            openApp(appId, params = {}) {
+                const app = this.apps.get(appId);
+                if (!app) return;
+
+                const winId = 'win_' + Date.now();
+                const windowState = {
+                    id: winId,
+                    appId: appId,
+                    title: app.name,
+                    x: Math.max(40, 60 + (this.windows.size * 25) % 200),
+                    y: Math.max(40, 40 + (this.windows.size * 25) % 150),
+                    width: app.width || 600,
+                    height: app.height || 400,
+                    isMinimized: false,
+                    isMaximized: false,
+                    prevRect: null,
+                    params: params
+                };
+
+                this.windows.set(winId, windowState);
+                this.createWindowDOM(windowState, app);
+                this.focusWindow(winId);
+                this.updateTaskbar();
+                this.closeMenus();
+            }
+
+            createWindowDOM(winState, app) {
+                const winEl = document.createElement('div');
+                winEl.id = winState.id;
+                winEl.className = 'absolute glass rounded-xl shadow-2xl overflow-hidden flex flex-col pointer-events-auto window-transition border border-slate-700/60';
+                winEl.style.left = `${winState.x}px`;
+                winEl.style.top = `${winState.y}px`;
+                winEl.style.width = `${winState.width}px`;
+                winEl.style.height = `${winState.height}px`;
+
+                winEl.innerHTML = `
+                    <!-- Resize Handles -->
+                    <div class="resize-handle resize-n"></div>
+                    <div class="resize-handle resize-s"></div>
+                    <div class="resize-handle resize-e"></div>
+                    <div class="resize-handle resize-w"></div>
+                    <div class="resize-handle resize-ne"></div>
+                    <div class="resize-handle resize-nw"></div>
+                    <div class="resize-handle resize-se"></div>
+                    <div class="resize-handle resize-sw"></div>
+
+                    <!-- Titlebar -->
+                    <div class="window-titlebar bg-slate-900/80 px-3 py-2 border-b border-slate-700/50 flex items-center justify-between cursor-move select-none">
+                        <div class="flex items-center gap-2 text-xs font-semibold text-slate-200 truncate">
+                            <i class="fa-solid ${app.icon} ${app.color}"></i>
+                            <span class="window-title-text">${winState.title}</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 no-drag">
+                            <button onclick="WebOS.minimizeWindow('${winState.id}')" class="w-3 h-3 rounded-full bg-amber-500/80 hover:bg-amber-500 flex items-center justify-center text-[8px] text-slate-950"><i class="fa-solid fa-minus opacity-0 hover:opacity-100"></i></button>
+                            <button onclick="WebOS.maximizeWindow('${winState.id}')" class="w-3 h-3 rounded-full bg-emerald-500/80 hover:bg-emerald-500 flex items-center justify-center text-[8px] text-slate-950"><i class="fa-solid fa-expand opacity-0 hover:opacity-100"></i></button>
+                            <button onclick="WebOS.closeWindow('${winState.id}')" class="w-3 h-3 rounded-full bg-rose-500/80 hover:bg-rose-500 flex items-center justify-center text-[8px] text-slate-950"><i class="fa-solid fa-xmark opacity-0 hover:opacity-100"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- Window Content -->
+                    <div class="window-content flex-1 bg-slate-900/60 overflow-auto relative"></div>
+                `;
+
+                // Add to DOM
+                document.getElementById('windows-container').appendChild(winEl);
+
+                // Focus listener
+                winEl.addEventListener('mousedown', () => this.focusWindow(winState.id));
+
+                // Initialize Drag & Resize
+                this.attachWindowControls(winEl, winState);
+
+                // Render App Inside Content
+                const contentBody = winEl.querySelector('.window-content');
+                app.render(contentBody, winState);
+            }
+
+            attachWindowControls(winEl, winState) {
+                const titlebar = winEl.querySelector('.window-titlebar');
+                let isDragging = false;
+                let dragX, dragY;
+
+                titlebar.addEventListener('mousedown', (e) => {
+                    if (e.target.closest('.no-drag')) return;
+                    if (winState.isMaximized) return;
+
+                    isDragging = true;
+                    winEl.classList.remove('window-transition');
+                    dragX = e.clientX - winEl.offsetLeft;
+                    dragY = e.clientY - winEl.offsetTop;
+
+                    const onMouseMove = (moveEv) => {
+                        if (!isDragging) return;
+                        let newX = moveEv.clientX - dragX;
+                        let newY = moveEv.clientY - dragY;
+
+                        // Bounds checking
+                        newY = Math.max(0, newY);
+                        winEl.style.left = `${newX}px`;
+                        winEl.style.top = `${newY}px`;
+                        winState.x = newX;
+                        winState.y = newY;
+                    };
+
+                    const onMouseUp = () => {
+                        isDragging = false;
+                        winEl.classList.add('window-transition');
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                    };
+
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                });
+
+                // Resizing logic
+                const handles = winEl.querySelectorAll('.resize-handle');
+                handles.forEach(handle => {
+                    handle.addEventListener('mousedown', (e) => {
+                        e.stopPropagation();
+                        if (winState.isMaximized) return;
+
+                        winEl.classList.remove('window-transition');
+                        const startWidth = winEl.offsetWidth;
+                        const startHeight = winEl.offsetHeight;
+                        const startX = winEl.offsetLeft;
+                        const startY = winEl.offsetTop;
+                        const startMouseX = e.clientX;
+                        const startMouseY = e.clientY;
+
+                        const onResize = (moveEv) => {
+                            const deltaX = moveEv.clientX - startMouseX;
+                            const deltaY = moveEv.clientY - startMouseY;
+
+                            if (handle.classList.contains('resize-e') || handle.classList.contains('resize-se') || handle.classList.contains('resize-ne')) {
+                                const w = Math.max(300, startWidth + deltaX);
+                                winEl.style.width = `${w}px`;
+                                winState.width = w;
+                            }
+                            if (handle.classList.contains('resize-s') || handle.classList.contains('resize-se') || handle.classList.contains('resize-sw')) {
+                                const h = Math.max(200, startHeight + deltaY);
+                                winEl.style.height = `${h}px`;
+                                winState.height = h;
+                            }
+                            if (handle.classList.contains('resize-w') || handle.classList.contains('resize-sw') || handle.classList.contains('resize-nw')) {
+                                const w = Math.max(300, startWidth - deltaX);
+                                if (w > 300) {
+                                    winEl.style.width = `${w}px`;
+                                    winEl.style.left = `${startX + deltaX}px`;
+                                    winState.width = w;
+                                    winState.x = startX + deltaX;
+                                }
+                            }
+                            if (handle.classList.contains('resize-n') || handle.classList.contains('resize-nw') || handle.classList.contains('resize-ne')) {
+                                const h = Math.max(200, startHeight - deltaY);
+                                if (h > 200) {
+                                    winEl.style.height = `${h}px`;
+                                    winEl.style.top = `${startY + deltaY}px`;
+                                    winState.height = h;
+                                    winState.y = startY + deltaY;
+                                }
+                            }
+                        };
+
+                        const stopResize = () => {
+                            winEl.classList.add('window-transition');
+                            document.removeEventListener('mousemove', onResize);
+                            document.removeEventListener('mouseup', stopResize);
+                        };
+
+                        document.addEventListener('mousemove', onResize);
+                        document.addEventListener('mouseup', stopResize);
+                    });
+                });
+            }
+
+            focusWindow(winId) {
+                const winState = this.windows.get(winId);
+                if (!winState) return;
+
+                this.zIndexCounter++;
+                const winEl = document.getElementById(winId);
+                if (winEl) {
+                    winEl.style.zIndex = this.zIndexCounter;
+                    winEl.classList.remove('opacity-80');
+                }
+
+                // Blur other windows visually
+                this.windows.forEach((w, id) => {
+                    if (id !== winId) {
+                        const el = document.getElementById(id);
+                        if (el) el.classList.add('opacity-80');
+                    }
+                });
+
+                this.activeWindowId = winId;
+                this.updateTaskbar();
+            }
+
+            minimizeWindow(winId) {
+                const winState = this.windows.get(winId);
+                if (!winState) return;
+
+                winState.isMinimized = true;
+                const winEl = document.getElementById(winId);
+                if (winEl) {
+                    winEl.classList.add('hidden');
+                }
+                this.updateTaskbar();
+            }
+
+            restoreWindow(winId) {
+                const winState = this.windows.get(winId);
+                if (!winState) return;
+
+                winState.isMinimized = false;
+                const winEl = document.getElementById(winId);
+                if (winEl) {
+                    winEl.classList.remove('hidden');
+                }
+                this.focusWindow(winId);
+            }
+
+            maximizeWindow(winId) {
+                const winState = this.windows.get(winId);
+                const winEl = document.getElementById(winId);
+                if (!winState || !winEl) return;
+
+                if (!winState.isMaximized) {
+                    winState.prevRect = { x: winState.x, y: winState.y, width: winState.width, height: winState.height };
+                    winEl.style.left = '0px';
+                    winEl.style.top = '0px';
+                    winEl.style.width = '100%';
+                    winEl.style.height = '100%';
+                    winEl.classList.remove('rounded-xl');
+                    winState.isMaximized = true;
+                } else {
+                    const r = winState.prevRect;
+                    winEl.style.left = `${r.x}px`;
+                    winEl.style.top = `${r.y}px`;
+                    winEl.style.width = `${r.width}px`;
+                    winEl.style.height = `${r.height}px`;
+                    winEl.classList.add('rounded-xl');
+                    winState.isMaximized = false;
+                }
+            }
+
+            closeWindow(winId) {
+                const winEl = document.getElementById(winId);
+                if (winEl) winEl.remove();
+                this.windows.delete(winId);
+                this.updateTaskbar();
+            }
+
+            // --- UI RENDERING & COMPONENT HELPERS ---
+            renderDesktopIcons() {
+                const container = document.getElementById('desktop-icons');
+                container.innerHTML = '';
+
+                this.apps.forEach(app => {
+                    const iconEl = document.createElement('div');
+                    iconEl.className = 'desktop-shortcut flex flex-col items-center justify-center p-2 rounded-xl text-center cursor-pointer w-20 hover:bg-slate-800/40 transition group';
+                    iconEl.innerHTML = `
+                        <div class="w-12 h-12 rounded-2xl glass flex items-center justify-center text-2xl mb-1 shadow-lg group-hover:scale-105 transition-transform">
+                            <i class="fa-solid ${app.icon} ${app.color}"></i>
+                        </div>
+                        <span class="text-xs font-medium text-slate-200 drop-shadow truncate w-full">${app.name}</span>
+                    `;
+                    iconEl.ondblclick = () => this.openApp(app.id);
+                    iconEl.onclick = (e) => {
+                        e.stopPropagation();
+                        document.querySelectorAll('.desktop-shortcut').forEach(el => el.classList.remove('selected'));
+                        iconEl.classList.add('selected');
+                    };
+                    container.appendChild(iconEl);
+                });
+            }
+
+            renderStartMenu() {
+                const pinnedGrid = document.getElementById('start-pinned-grid');
+                const allList = document.getElementById('start-all-list');
+                pinnedGrid.innerHTML = '';
+                allList.innerHTML = '';
+
+                this.apps.forEach(app => {
+                    if (app.pinned) {
+                        const btn = document.createElement('button');
+                        btn.className = 'flex flex-col items-center p-2 rounded-xl hover:bg-slate-800/60 transition group';
+                        btn.innerHTML = `
+                            <div class="w-10 h-10 rounded-xl glass flex items-center justify-center text-xl mb-1 group-hover:scale-110 transition">
+                                <i class="fa-solid ${app.icon} ${app.color}"></i>
+                            </div>
+                            <span class="text-[11px] text-slate-300 truncate w-full text-center">${app.name}</span>
+                        `;
+                        btn.onclick = () => this.openApp(app.id);
+                        pinnedGrid.appendChild(btn);
+                    }
+
+                    const row = document.createElement('button');
+                    row.className = 'w-full flex items-center gap-3 p-2 rounded-xl hover:bg-slate-800/60 transition text-left';
+                    row.innerHTML = `
+                        <i class="fa-solid ${app.icon} ${app.color} text-lg w-6 text-center"></i>
+                        <span class="text-xs text-slate-200 font-medium">${app.name}</span>
+                    `;
+                    row.onclick = () => this.openApp(app.id);
+                    allList.appendChild(row);
+                });
+            }
+
+            updateTaskbar() {
+                const container = document.getElementById('taskbar-apps');
+                container.innerHTML = '';
+
+                this.windows.forEach((win, winId) => {
+                    const app = this.apps.get(win.appId);
+                    const btn = document.createElement('button');
+                    const isActive = this.activeWindowId === winId && !win.isMinimized;
+
+                    btn.className = `p-1.5 px-3 rounded-xl flex items-center gap-2 text-xs font-medium transition border ${
+                        isActive 
+                        ? 'bg-slate-800/90 text-white border-cyan-500/50 shadow-sm' 
+                        : 'bg-slate-900/40 text-slate-400 border-slate-700/40 hover:bg-slate-800/50'
+                    }`;
+
+                    btn.innerHTML = `
+                        <i class="fa-solid ${app.icon} ${app.color}"></i>
+                        <span class="truncate max-w-[100px]">${win.title}</span>
+                    `;
+
+                    btn.onclick = () => {
+                        if (win.isMinimized) {
+                            this.restoreWindow(winId);
+                        } else if (this.activeWindowId === winId) {
+                            this.minimizeWindow(winId);
+                        } else {
+                            this.focusWindow(winId);
+                        }
+                    };
+
+                    container.appendChild(btn);
+                });
+            }
+
+            // --- SYSTEM EVENTS & CONTROLS ---
+            setupEventListeners() {
+                // Desktop right click context menu
+                document.getElementById('workspace').addEventListener('contextmenu', (e) => {
+                    if (e.target.closest('.window-content')) return;
+                    e.preventDefault();
+                    const menu = document.getElementById('context-menu');
+                    menu.style.left = `${e.clientX}px`;
+                    menu.style.top = `${e.clientY}px`;
+                    menu.classList.remove('hidden');
+                });
+
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('#context-menu')) {
+                        document.getElementById('context-menu').classList.add('hidden');
+                    }
+                    if (!e.target.closest('#start-menu') && !e.target.closest('#start-btn')) {
+                        document.getElementById('start-menu').classList.add('hidden');
+                    }
+                    if (!e.target.closest('#quick-settings') && !e.target.closest('button[onclick*="toggleQuickSettings"]')) {
+                        document.getElementById('quick-settings').classList.add('hidden');
+                    }
+                    if (!e.target.closest('#notification-center') && !e.target.closest('button[onclick*="toggleNotifications"]')) {
+                        document.getElementById('notification-center').classList.add('hidden');
+                    }
+                });
+
+                // Global Shortcuts
+                document.addEventListener('keydown', (e) => {
+                    if (e.altKey && e.key === 'Tab') {
+                        e.preventDefault();
+                        this.showAltTab();
+                    }
+                    if (e.metaKey && e.key.toLowerCase() === 't') {
+                        e.preventDefault();
+                        this.openApp('terminal');
+                    }
+                    if (e.metaKey && e.key.toLowerCase() === 'e') {
+                        e.preventDefault();
+                        this.openApp('file-manager');
+                    }
+                });
+            }
+
+            closeMenus() {
+                document.getElementById('start-menu').classList.add('hidden');
+                document.getElementById('context-menu').classList.add('hidden');
+                document.getElementById('quick-settings').classList.add('hidden');
+                document.getElementById('notification-center').classList.add('hidden');
+            }
+
+            toggleStartMenu(focusSearch = false) {
+                const menu = document.getElementById('start-menu');
+                menu.classList.toggle('hidden');
+                if (!menu.classList.contains('hidden') && focusSearch) {
+                    document.getElementById('start-search').focus();
+                }
+            }
+
+            toggleQuickSettings() {
+                document.getElementById('quick-settings').classList.toggle('hidden');
+            }
+
+            toggleNotifications() {
+                document.getElementById('notification-center').classList.toggle('hidden');
+            }
+
+            startClock() {
+                const update = () => {
+                    const now = new Date();
+                    document.getElementById('clock-time').innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    document.getElementById('clock-date').innerText = now.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+                };
+                update();
+                setInterval(update, 1000);
+            }
+
+            notify(title, msg, type = 'info') {
+                const notif = { title, msg, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+                this.notifications.unshift(notif);
+                
+                const list = document.getElementById('notifications-list');
+                const badge = document.getElementById('notif-badge');
+                badge.classList.remove('hidden');
+
+                if (list.querySelector('.text-slate-500')) list.innerHTML = '';
+
+                const item = document.createElement('div');
+                item.className = 'p-3 bg-slate-800/80 border border-slate-700/50 rounded-xl space-y-1 text-xs';
+                item.innerHTML = `
+                    <div class="flex justify-between font-semibold text-slate-200">
+                        <span>${title}</span>
+                        <span class="text-[10px] text-slate-400 font-normal">${notif.time}</span>
+                    </div>
+                    <div class="text-slate-300">${msg}</div>
+                `;
+                list.prepend(item);
+            }
+
+            clearNotifications() {
+                this.notifications = [];
+                document.getElementById('notifications-list').innerHTML = '<div class="text-xs text-slate-500 text-center py-8">No new notifications</div>';
+                document.getElementById('notif-badge').classList.add('hidden');
+            }
+
+            toggleFullScreen() {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen();
+                } else {
+                    document.exitFullscreen();
+                }
+            }
+
+            lockScreen() {
+                document.getElementById('lock-screen').classList.remove('hidden');
+                this.closeMenus();
+            }
+
+            unlockScreen() {
+                document.getElementById('lock-screen').classList.add('hidden');
+            }
+
+            restartUI() {
+                window.location.reload();
+            }
+
+            powerMenu() {
+                if (confirm('Are you sure you want to shut down simulated WebOS?')) {
+                    document.body.innerHTML = `
+                        <div class="h-full w-full bg-slate-950 flex flex-col items-center justify-center text-slate-400 font-mono space-y-4">
+                            <i class="fa-solid fa-power-off text-4xl text-rose-500 animate-pulse"></i>
+                            <div>WebOS session terminated.</div>
+                            <button onclick="window.location.reload()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs">Power On</button>
+                        </div>
+                    `;
+                }
+            }
+
+            // --- BUILT-IN APPLICATIONS IMPLEMENTATION ---
+
+            // 1. File Manager Application
+            renderFileManager(win, instance) {
+                win.innerHTML = `
+                    <div class="h-full flex flex-col text-xs text-slate-200">
+                        <div class="p-2 bg-slate-800/50 border-b border-slate-700/50 flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-1 font-mono text-cyan-400 bg-slate-950/40 px-3 py-1 rounded-lg flex-1 truncate" id="fm-path-${instance.id}">
+                                /Home
+                            </div>
+                            <button class="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 rounded-lg font-medium" id="fm-new-btn-${instance.id}">+ New Folder</button>
+                        </div>
+                        <div class="flex-1 p-4 grid grid-cols-4 gap-4 align-content-start" id="fm-grid-${instance.id}">
+                            <!-- Dynamic Files -->
+                        </div>
+                    </div>
+                `;
+
+                let currentPath = '/Home';
+                let currentParentId = 'home';
+
+                const loadDir = async () => {
+                    const grid = win.querySelector(`#fm-grid-${instance.id}`);
+                    grid.innerHTML = '';
+                    win.querySelector(`#fm-path-${instance.id}`).innerText = currentPath;
+
+                    const files = await this.vfs.getChildren(currentParentId);
+                    
+                    if (files.length === 0) {
+                        grid.innerHTML = '<div class="col-span-4 text-center py-10 text-slate-500">Folder is empty</div>';
+                        return;
+                    }
+
+                    files.forEach(file => {
+                        const card = document.createElement('div');
+                        card.className = 'p-3 glass rounded-xl flex flex-col items-center gap-2 cursor-pointer hover:bg-cyan-500/10 border border-slate-700/40 group';
+                        const isDir = file.type === 'dir';
+                        
+                        card.innerHTML = `
+                            <i class="fa-solid ${isDir ? 'fa-folder text-amber-400' : 'fa-file-lines text-cyan-400'} text-3xl group-hover:scale-110 transition"></i>
+                            <span class="truncate w-full text-center font-medium">${file.name}</span>
+                        `;
+
+                        card.onclick = async () => {
+                            if (isDir) {
+                                currentPath = file.path;
+                                currentParentId = file.id;
+                                loadDir();
+                            } else {
+                                this.openApp('text-editor', { filePath: file.path });
+                            }
+                        };
+
+                        grid.appendChild(card);
+                    });
+                };
+
+                win.querySelector(`#fm-new-btn-${instance.id}`).onclick = async () => {
+                    const name = prompt('Folder name:');
+                    if (name) {
+                        await this.vfs.saveFile({
+                            name,
+                            type: 'dir',
+                            parentId: currentParentId,
+                            path: `${currentPath}/${name}`
+                        });
+                        loadDir();
+                    }
+                };
+
+                loadDir();
+            }
+
+            // 2. Text Editor Application
+            async renderTextEditor(win, instance) {
+                let currentFilePath = instance.params?.filePath || null;
+                let initialContent = '';
+
+                if (currentFilePath) {
+                    const f = await this.vfs.getFileByPath(currentFilePath);
+                    if (f) initialContent = f.content || '';
+                }
+
+                win.innerHTML = `
+                    <div class="h-full flex flex-col">
+                        <div class="p-2 bg-slate-800/50 border-b border-slate-700/50 flex justify-between items-center text-xs">
+                            <span class="font-mono text-slate-400" id="te-file-${instance.id}">${currentFilePath || 'Untitled.txt'}</span>
+                            <div class="flex gap-2">
+                                <button id="te-save-${instance.id}" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium"><i class="fa-solid fa-floppy-disk mr-1"></i> Save</button>
+                            </div>
+                        </div>
+                        <textarea id="te-area-${instance.id}" class="flex-1 bg-slate-950/80 p-4 font-mono text-sm text-slate-200 outline-none resize-none">${initialContent}</textarea>
+                    </div>
+                `;
+
+                win.querySelector(`#te-save-${instance.id}`).onclick = async () => {
+                    const content = win.querySelector(`#te-area-${instance.id}`).value;
+                    if (!currentFilePath) {
+                        const name = prompt('Enter filename:', 'Notes.txt');
+                        if (!name) return;
+                        currentFilePath = `/Home/Documents/${name}`;
+                    }
+
+                    const parts = currentFilePath.split('/');
+                    const name = parts[parts.length - 1];
+
+                    await this.vfs.saveFile({
+                        name,
+                        type: 'file',
+                        parentId: 'documents',
+                        path: currentFilePath,
+                        content
+                    });
+
+                    win.querySelector(`#te-file-${instance.id}`).innerText = currentFilePath;
+                    this.notify('File Saved', `Saved to ${currentFilePath}`);
+                };
+            }
+
+            // 3. Terminal Emulator Application
+            renderTerminal(win, instance) {
+                win.innerHTML = `
+                    <div class="h-full bg-slate-950 p-4 font-mono text-xs text-emerald-400 flex flex-col overflow-hidden">
+                        <div id="term-out-${instance.id}" class="flex-1 overflow-y-auto space-y-1 mb-2">
+                            <div>WebOS Terminal v1.0. Type <span class="text-white font-bold">'help'</span> for list of commands.</div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-cyan-400 font-bold">user@webos:~$</span>
+                            <input type="text" id="term-in-${instance.id}" class="flex-1 bg-transparent text-slate-100 outline-none font-mono">
+                        </div>
+                    </div>
+                `;
+
+                const output = win.querySelector(`#term-out-${instance.id}`);
+                const input = win.querySelector(`#term-in-${instance.id}`);
+
+                input.addEventListener('keydown', async (e) => {
+                    if (e.key === 'Enter') {
+                        const cmd = input.value.trim();
+                        input.value = '';
+                        if (!cmd) return;
+
+                        const line = document.createElement('div');
+                        line.innerHTML = `<span class="text-cyan-400">user@webos:~$</span> ${cmd}`;
+                        output.appendChild(line);
+
+                        const response = document.createElement('div');
+                        response.className = 'text-slate-300';
+
+                        const args = cmd.split(' ');
+                        switch (args[0].toLowerCase()) {
+                            case 'help':
+                                response.innerText = 'Available commands: help, clear, whoami, date, ls, neofetch, echo';
+                                break;
+                            case 'clear':
+                                output.innerHTML = '';
+                                return;
+                            case 'whoami':
+                                response.innerText = 'webos-user';
+                                break;
+                            case 'date':
+                                response.innerText = new Date().toString();
+                                break;
+                            case 'ls':
+                                const files = await this.vfs.getChildren('documents');
+                                response.innerText = files.map(f => f.name).join('  ') || 'Documents folder empty';
+                                break;
+                            case 'neofetch':
+                                response.innerHTML = `
+                                    <pre class="text-cyan-400 text-[10px]">
+       /\\         OS: WebOS Linux Browser Edition
+      /  \\        Kernel: 5.15.0-simulated
+     / /\\ \\       Uptime: Active Session
+    / /  \\ \\      Shell: webos-bash
+   /_/    \\_\\     WM: WebOS Glass Window Manager
+                                    </pre>`;
+                                break;
+                            case 'echo':
+                                response.innerText = args.slice(1).join(' ');
+                                break;
+                            default:
+                                response.innerText = `bash: command not found: ${args[0]}`;
+                        }
+
+                        output.appendChild(response);
+                        output.scrollTop = output.scrollHeight;
+                    }
+                });
+            }
+
+            // 4. Calculator Application
+            renderCalculator(win, instance) {
+                win.innerHTML = `
+                    <div class="h-full bg-slate-950 p-4 flex flex-col text-slate-100">
+                        <div id="calc-display-${instance.id}" class="bg-slate-900 border border-slate-700/60 p-4 rounded-xl text-right text-2xl font-mono mb-4 h-16 flex items-center justify-end overflow-x-auto">0</div>
+                        <div class="grid grid-cols-4 gap-2 flex-1">
+                            <button class="calc-btn p-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-rose-400">C</button>
+                            <button class="calc-btn p-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold">(</button>
+                            <button class="calc-btn p-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold">)</button>
+                            <button class="calc-btn p-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold">/</button>
+                            <button class="calc-btn p-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold">7</button>
+                            <button class="calc-btn p-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold">8</button>
+                            <button class="calc-btn p-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold">9</button>
+                            <button class="calc-btn p-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold">*</button>
+                            <button class="calc-btn p-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold">4</button>
+                            <button class="calc-btn p-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold">5</button>
+                            <button class="calc-btn p-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold">6</button>
+                            <button class="calc-btn p-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold">-</button>
+                            <button class="calc-btn p-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold">1</button>
+                            <button class="calc-btn p-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold">2</button>
+                            <button class="calc-btn p-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold">3</button>
+                            <button class="calc-btn p-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold">+</button>
+                            <button class="calc-btn col-span-2 p-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold">0</button>
+                            <button class="calc-btn p-3 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold">.</button>
+                            <button class="calc-btn p-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold">=</button>
+                        </div>
+                    </div>
+                `;
+
+                const display = win.querySelector(`#calc-display-${instance.id}`);
+                let expr = '';
+
+                win.querySelectorAll('.calc-btn').forEach(btn => {
+                    btn.onclick = () => {
+                        const txt = btn.innerText;
+                        if (txt === 'C') {
+                            expr = '';
+                            display.innerText = '0';
+                        } else if (txt === '=') {
+                            try {
+                                expr = Function('"use strict";return (' + expr + ')')().toString();
+                                display.innerText = expr;
+                            } catch(e) {
+                                display.innerText = 'Error';
+                                expr = '';
+                            }
+                        } else {
+                            expr += txt;
+                            display.innerText = expr;
+                        }
+                    };
+                });
+            }
+
+            // 5. Settings Application
+            renderSettings(win, instance) {
+                win.innerHTML = `
+                    <div class="h-full p-6 text-xs text-slate-200 space-y-6">
+                        <div>
+                            <h3 class="font-bold text-sm text-cyan-400 mb-3">Desktop Wallpaper</h3>
+                            <div class="grid grid-cols-4 gap-3">
+                                <button onclick="WebOS.setWallpaper('wp-1')" class="h-16 rounded-xl wp-1 border-2 border-slate-700 hover:border-cyan-400"></button>
+                                <button onclick="WebOS.setWallpaper('wp-2')" class="h-16 rounded-xl wp-2 border-2 border-slate-700 hover:border-cyan-400"></button>
+                                <button onclick="WebOS.setWallpaper('wp-3')" class="h-16 rounded-xl wp-3 border-2 border-slate-700 hover:border-cyan-400"></button>
+                                <button onclick="WebOS.setWallpaper('wp-4')" class="h-16 rounded-xl wp-4 border-2 border-slate-700 hover:border-cyan-400"></button>
+                            </div>
+                        </div>
+
+                        <div class="pt-4 border-t border-slate-700/50">
+                            <h3 class="font-bold text-sm text-cyan-400 mb-3">System Identity</h3>
+                            <div class="space-y-2">
+                                <div>Hostname: <span class="font-mono text-emerald-400">webos-desktop</span></div>
+                                <div>Storage: <span class="font-mono text-emerald-400">IndexedDB VFS Active</span></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            setWallpaper(wpClass) {
+                this.settings.wallpaper = wpClass;
+                this.saveSettings();
+            }
+
+            // 6. Browser Application
+            renderBrowser(win, instance) {
+                win.innerHTML = `
+                    <div class="h-full flex flex-col">
+                        <div class="p-2 bg-slate-800/80 border-b border-slate-700/50 flex items-center gap-2">
+                            <input type="text" id="browser-url-${instance.id}" value="https://duckduckgo.com" class="flex-1 bg-slate-900 border border-slate-700/60 px-3 py-1 rounded-xl text-xs text-slate-100 outline-none">
+                            <button id="browser-go-${instance.id}" class="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 rounded-xl text-xs font-medium">Go</button>
+                        </div>
+                        <iframe id="browser-frame-${instance.id}" src="https://duckduckgo.com" class="flex-1 w-full border-none bg-white"></iframe>
+                    </div>
+                `;
+
+                const input = win.querySelector(`#browser-url-${instance.id}`);
+                const frame = win.querySelector(`#browser-frame-${instance.id}`);
+
+                win.querySelector(`#browser-go-${instance.id}`).onclick = () => {
+                    let url = input.value;
+                    if (!url.startsWith('http')) url = 'https://' + url;
+                    frame.src = url;
+                };
+            }
+
+            // 7. Paint Application
+            renderPaint(win, instance) {
+                win.innerHTML = `
+                    <div class="h-full flex flex-col bg-slate-950">
+                        <div class="p-2 bg-slate-800/80 border-b border-slate-700/50 flex items-center gap-3">
+                            <input type="color" id="paint-color-${instance.id}" value="#06b6d4" class="w-8 h-8 rounded cursor-pointer bg-transparent border-none">
+                            <button id="paint-clear-${instance.id}" class="px-3 py-1 bg-rose-600 hover:bg-rose-500 rounded-xl text-xs font-medium">Clear</button>
+                        </div>
+                        <canvas id="paint-canvas-${instance.id}" class="flex-1 cursor-crosshair bg-slate-900"></canvas>
+                    </div>
+                `;
+
+                const canvas = win.querySelector(`#paint-canvas-${instance.id}`);
+                const ctx = canvas.getContext('2d');
+                let painting = false;
+
+                // Adjust resolution
+                setTimeout(() => {
+                    canvas.width = canvas.offsetWidth;
+                    canvas.height = canvas.offsetHeight;
+                }, 100);
+
+                canvas.onmousedown = () => painting = true;
+                canvas.onmouseup = () => { painting = false; ctx.beginPath(); };
+                canvas.onmousemove = (e) => {
+                    if (!painting) return;
+                    const rect = canvas.getBoundingClientRect();
+                    ctx.lineWidth = 4;
+                    ctx.lineCap = 'round';
+                    ctx.strokeStyle = win.querySelector(`#paint-color-${instance.id}`).value;
+                    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+                };
+
+                win.querySelector(`#paint-clear-${instance.id}`).onclick = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                };
+            }
+
+            // 8. Games Center (Snake)
+            renderGames(win, instance) {
+                win.innerHTML = `
+                    <div class="h-full bg-slate-950 p-4 flex flex-col items-center justify-center">
+                        <div class="text-xs font-mono text-cyan-400 mb-2">Use Arrow Keys to Play Snake</div>
+                        <canvas id="snake-canvas-${instance.id}" width="300" height="300" class="bg-slate-900 border border-slate-700/60 rounded-xl"></canvas>
+                        <div class="mt-2 text-xs text-slate-300 font-bold" id="snake-score-${instance.id}">Score: 0</div>
+                    </div>
+                `;
+
+                const canvas = win.querySelector(`#snake-canvas-${instance.id}`);
+                const ctx = canvas.getContext('2d');
+                let snake = [{x: 10, y: 10}];
+                let food = {x: 5, y: 5};
+                let dx = 1, dy = 0;
+                let score = 0;
+
+                const gameLoop = setInterval(() => {
+                    const head = {x: snake[0].x + dx, y: snake[0].y + dy};
+                    snake.unshift(head);
+
+                    if (head.x === food.x && head.y === food.y) {
+                        score += 10;
+                        win.querySelector(`#snake-score-${instance.id}`).innerText = `Score: ${score}`;
+                        food = {x: Math.floor(Math.random()*15), y: Math.floor(Math.random()*15)};
+                    } else {
+                        snake.pop();
+                    }
+
+                    // Render
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(0, 0, 300, 300);
+
+                    ctx.fillStyle = '#06b6d4';
+                    snake.forEach(p => ctx.fillRect(p.x * 20, p.y * 20, 18, 18));
+
+                    ctx.fillStyle = '#f43f5e';
+                    ctx.fillRect(food.x * 20, food.y * 20, 18, 18);
+                }, 150);
+
+                const handleKey = (e) => {
+                    if (e.key === 'ArrowUp' && dy === 0) { dx = 0; dy = -1; }
+                    if (e.key === 'ArrowDown' && dy === 0) { dx = 0; dy = 1; }
+                    if (e.key === 'ArrowLeft' && dx === 0) { dx = -1; dy = 0; }
+                    if (e.key === 'ArrowRight' && dx === 0) { dx = 1; dy = 0; }
+                };
+
+                document.addEventListener('keydown', handleKey);
+            }
+
+            // 9. System Monitor
+            renderSystemMonitor(win, instance) {
+                win.innerHTML = `
+                    <div class="h-full p-4 text-xs text-slate-200 space-y-4">
+                        <div class="p-3 bg-slate-800/60 rounded-xl border border-slate-700/50">
+                            <div class="font-bold text-cyan-400 mb-1">Virtual Memory Usage</div>
+                            <div class="w-full bg-slate-900 h-3 rounded-full overflow-hidden">
+                                <div class="bg-cyan-500 h-full w-2/5"></div>
+                            </div>
+                            <div class="text-[10px] text-slate-400 mt-1">1.2 GB / 4.0 GB Simulated RAM</div>
+                        </div>
+
+                        <div class="p-3 bg-slate-800/60 rounded-xl border border-slate-700/50">
+                            <div class="font-bold text-emerald-400 mb-1">Active Windows Count</div>
+                            <div class="text-2xl font-mono">${this.windows.size}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 10. Calendar
+            renderCalendar(win, instance) {
+                const now = new Date();
+                win.innerHTML = `
+                    <div class="h-full p-4 bg-slate-950 flex flex-col items-center justify-center text-slate-200">
+                        <div class="text-4xl font-bold text-cyan-400">${now.getDate()}</div>
+                        <div class="text-lg font-medium mt-1">${now.toLocaleDateString([], { month: 'long', year: 'numeric' })}</div>
+                        <div class="text-xs text-slate-400 font-mono mt-2">${now.toLocaleDateString([], { weekday: 'long' })}</div>
+                    </div>
+                `;
+            }
+        }
+
+        // --- INSTANTIATE OS ON WINDOW LOAD ---
+        let WebOS;
+        window.addEventListener('DOMContentLoaded', () => {
+            WebOS = new OSManager();
+            WebOS.init();
+        });
+    </script>
+</body>
+</html>
